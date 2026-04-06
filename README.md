@@ -57,11 +57,14 @@ sshwitch gen --name work --email you@company.com
 
 # 2. Add the printed public key to GitHub/GitLab (Settings → SSH Keys)
 
-# 3. Link the key to a repository
+# 3. Add the key to the SSH agent
+sshwitch add --key work
+
+# 4. Link the key to a repository
 cd ~/code/work-project
 sshwitch link --key work
 
-# 4. Verify everything is working
+# 5. Verify everything is working
 sshwitch doctor
 ```
 
@@ -107,6 +110,33 @@ sshwitch gen --name test --email test@test.com --dry-run
 The generated files:
 - `~/.ssh/<name>` — private key (keep this secret)
 - `~/.ssh/<name>.pub` — public key (add this to GitHub/GitLab)
+
+---
+
+### `sshwitch add` — Add a key to the SSH agent
+
+Loads an existing SSH private key into the running SSH agent so it is available for Git operations and SSH connections.
+
+```
+USAGE: sshwitch add --key <key>
+
+OPTIONS:
+  --key <key>       Key name (e.g., work) or absolute path to private key
+```
+
+**Examples:**
+
+```bash
+# Add by key name
+sshwitch add --key work
+
+# Add by path
+sshwitch add --key ~/.ssh/personal
+```
+
+**What it does:**
+
+Runs `ssh-add <key-path>` to load the key into the agent. If the agent is not running, the command exits with an error.
 
 ---
 
@@ -263,11 +293,13 @@ sshwitch doctor — running checks...
 
 ```bash
 # Set up work identity
-sshwitch gen --name work --email alice@company.com --add-to-agent
+sshwitch gen --name work --email alice@company.com
+sshwitch add --key work
 # Add ~/.ssh/work.pub to your work GitHub account
 
 # Set up personal identity
-sshwitch gen --name personal --email alice@gmail.com --add-to-agent
+sshwitch gen --name personal --email alice@gmail.com
+sshwitch add --key personal
 # Add ~/.ssh/personal.pub to your personal GitHub account
 
 # Link each repo to the correct key
@@ -332,7 +364,7 @@ This value lives in `.git/config` inside the repository and overrides both `~/.g
 - macOS 14 or later
 - Git
 - `ssh-keygen` (included with macOS)
-- `ssh-add` (included with macOS, only needed for `--add-to-agent`)
+- `ssh-add` (included with macOS, needed for `sshwitch add` and `gen --add-to-agent`)
 
 ---
 
