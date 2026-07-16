@@ -28,7 +28,10 @@ struct Gen: ParsableCommand {
     @Flag(name: .long, help: "Print intended actions without executing them.")
     var dryRun: Bool = false
 
+    @OptionGroup var output: OutputOptions
+
     func run() throws {
+        output.apply()
         guard !name.isEmpty, !name.contains("/") else {
             throw ValidationError("--name must be a plain filename with no path separators.")
         }
@@ -38,11 +41,17 @@ struct Gen: ParsableCommand {
         let totalSteps = addToAgent ? 3 : 2
 
         if dryRun {
-            Output.print("[dry-run] Would run: ssh-keygen -t ed25519 -C \"\(email)\" -f \(keyPath) -N \"\"")
-            Output.print("[dry-run] Would set permissions 600 on \(keyPath) and \(keyPath).pub")
+            Output.print("Would generate an ed25519 SSH key:")
+            Output.print("  Private key: \(keyPath)")
+            Output.print("  Public key:  \(keyPath).pub")
+            Output.detail("Command: ssh-keygen -t ed25519 -C \"\(email)\" -f \(keyPath) -N \"\"")
+            Output.detail("Permissions: 600")
             if addToAgent {
-                Output.print("[dry-run] Would run: ssh-add \(keyPath)")
+                Output.print("  Add to agent: yes")
+                Output.detail("Command: ssh-add \(keyPath)")
             }
+            Output.print("")
+            Output.print("No changes were made.")
             return
         }
 
@@ -56,7 +65,7 @@ struct Gen: ParsableCommand {
         ])
 
         guard result.succeeded else {
-            throw RuntimeError("ssh-keygen failed (exit \(result.exitCode)).")
+            throw RuntimeError("ssh-keygen failed (exit \(result.exitCode)). \(result.errorOutput)")
         }
 
         // Step 2: Set permissions
@@ -86,8 +95,9 @@ struct Gen: ParsableCommand {
         Output.print("")
         Output.hint("Next steps:")
         Output.hint("  1. Copy the public key above and add it to GitHub/GitLab")
-        Output.hint("  2. Link this key to a repo:  sshwitch link --key \(name)")
-        Output.hint("  3. Verify your setup:        sshwitch doctor")
+        Output.hint("  2. Make it the global default: sshwitch switch --key \(name) --host github.com")
+        Output.hint("  3. Or override one repository: sshwitch link --key \(name)")
+        Output.hint("  4. Verify your setup:          sshwitch doctor")
     }
 
     // MARK: - Helpers

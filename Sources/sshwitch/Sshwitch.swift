@@ -4,19 +4,33 @@ import ArgumentParser
 struct Sshwitch: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sshwitch",
-        abstract: "Manage SSH keys for Git repositories.",
+        abstract: "Choose which SSH key Git and SSH use.",
         discussion: """
-        Quick start:
-          1. Generate a key:    sshwitch gen --name work --email you@company.com
-          2. Add to agent:      sshwitch add --key work
-          3. Link to a repo:    cd ~/code/myrepo && sshwitch link --key work
-          4. Verify setup:      sshwitch doctor
-          5. List your keys:    sshwitch list
-          6. Unlink a repo:     cd ~/code/myrepo && sshwitch unlink
+        WORKFLOWS
+          Create a key
+            sshwitch gen --name work --email you@company.com
+            sshwitch add --key work
 
-        Use --dry-run with gen, link, or unlink to preview changes before applying them.
+          Choose a global default for selected hosts
+            sshwitch switch --key work --host github.com
+            sshwitch status
+
+          Override one repository
+            sshwitch link --key personal
+            sshwitch unlink
+
+          Inspect and troubleshoot
+            sshwitch list
+            sshwitch doctor
+
+        A repository override takes precedence over the global default.
+        Use --dry-run to preview write operations and --verbose for technical details.
         """,
-        version: "1.0.0",
-        subcommands: [Gen.self, Add.self, Link.self, Unlink.self, List.self, Doctor.self]
+        version: "1.1.0",
+        subcommands: [Gen.self, Add.self, SwitchCommand.self, Status.self, Link.self, Unlink.self, List.self, Doctor.self]
     )
+
+    mutating func run() throws {
+        throw CleanExit.helpRequest(self)
+    }
 }

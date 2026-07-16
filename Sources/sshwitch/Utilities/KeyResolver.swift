@@ -4,6 +4,10 @@ enum KeyResolver {
     /// Resolves a key name or absolute path to a verified absolute path under ~/.ssh/.
     /// Throws if the resolved private key file does not exist.
     static func resolve(_ nameOrPath: String) throws -> String {
+        guard !nameOrPath.isEmpty,
+              nameOrPath.rangeOfCharacter(from: .controlCharacters) == nil else {
+            throw RuntimeError("SSH key name or path contains invalid control characters.")
+        }
         let path: String
         if nameOrPath.hasPrefix("/") || nameOrPath.hasPrefix("~") {
             // Treat as explicit path

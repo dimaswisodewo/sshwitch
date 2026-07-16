@@ -8,6 +8,12 @@ import Glibc
 
 enum Output {
 
+    nonisolated(unsafe) private static var verboseEnabled = false
+
+    static func configure(verbose: Bool) {
+        verboseEnabled = verbose
+    }
+
     // MARK: - Color support
 
     enum ANSIColor: String {
@@ -70,6 +76,17 @@ enum Output {
 
     static func hint(_ message: String) {
         Swift.print(colored("  \(message)", .yellow))
+    }
+
+    static func detail(_ message: String) {
+        guard verboseEnabled else { return }
+        Swift.print("  \(message)")
+    }
+
+    static func failure(_ message: String, cause: String? = nil, suggestion: String? = nil) {
+        error(message)
+        if let cause, !cause.isEmpty { error("Cause: \(cause)") }
+        if let suggestion { error("Try: \(suggestion)") }
     }
 
     static func step(_ number: Int, of total: Int, _ message: String) {

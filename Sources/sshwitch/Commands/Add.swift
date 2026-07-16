@@ -17,7 +17,10 @@ struct Add: ParsableCommand {
     @Option(name: .long, help: "Key name (e.g., work) or absolute path to private key.")
     var key: String
 
+    @OptionGroup var output: OutputOptions
+
     func run() throws {
+        output.apply()
         // Step 1: Resolve key path
         Output.step(1, of: 2, "Resolving key '\(key)'...")
         let keyPath = try KeyResolver.resolve(key)
@@ -27,10 +30,12 @@ struct Add: ParsableCommand {
         let result = try Shell.run("/usr/bin/ssh-add", arguments: [keyPath])
 
         guard result.succeeded else {
-            throw RuntimeError("ssh-add failed (exit \(result.exitCode)). Is the SSH agent running?")
+            throw RuntimeError("ssh-add failed (exit \(result.exitCode)). \(result.errorOutput) Is the SSH agent running?")
         }
 
         Output.print("")
         Output.success("Key '\(keyPath)' added to the SSH agent.")
+        Output.detail("Command: ssh-add \(keyPath)")
+        Output.hint("Choose where to use it: sshwitch switch --key \(URL(fileURLWithPath: keyPath).lastPathComponent) --host github.com")
     }
 }

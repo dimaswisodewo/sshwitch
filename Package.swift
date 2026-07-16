@@ -15,5 +15,10 @@ let package = Package(
             ],
             path: "Sources/sshwitch"
         ),
+        .testTarget(
+            name: "sshwitchTests",
+            dependencies: ["sshwitch"],
+            path: "Tests/sshwitchTests"
+        ),
     ]
 )

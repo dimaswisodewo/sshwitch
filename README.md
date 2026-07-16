@@ -1,390 +1,174 @@
 # sshwitch
 
-A command-line tool for managing SSH keys across multiple Git identities on a single machine.
+`sshwitch` makes SSH key selection explicit when you use multiple Git or SSH identities on one Mac. It can choose a default key for selected hosts or override the key for one Git repository.
 
-If you work with more than one GitHub/GitLab account (e.g., work and personal), `sshwitch` removes the pain of configuring `~/.ssh/config` host aliases or changing remote URLs. It uses Git's built-in `core.sshCommand` local config to bind a specific SSH key to a specific repository — no global side effects.
-
----
-
-## The Problem
-
-Using multiple Git accounts on one machine typically forces you to:
-
-- Write complex `~/.ssh/config` `Host` blocks
-- Change remote URLs from `github.com` to `github.com-work`
-- Remember which key goes with which account
-
-One mistake and your `git push` authenticates as the wrong identity, or fails entirely.
-
-## The Solution
-
-`sshwitch` handles key generation, permission management, and repository binding in a few short commands. The key insight is Git's `core.sshCommand`, a per-repository setting that tells Git exactly which SSH key to use — without touching global config or remote URLs.
-
-```
-git config core.sshCommand "ssh -i ~/.ssh/work -o IdentitiesOnly=yes"
-```
-
-`sshwitch link` sets this for you automatically.
-
----
-
-## Installation
-
-### Homebrew (recommended)
+## Install
 
 ```bash
 brew install dimaswisodewo/tools/sshwitch
 ```
 
-### Build from source
-
-Requires Swift 6.0+ and macOS 14+.
+Building from source requires Swift 6 and macOS 13 or later:
 
 ```bash
-git clone https://github.com/dimaswisodewo/sshwitch.git
-cd sshwitch
 swift build -c release
 cp .build/release/sshwitch /usr/local/bin/sshwitch
 ```
 
----
+## The two selection modes
 
-## Quick Start
+### Global default
+
+Use one key by default for selected SSH hosts. This is convenient when most repositories for a provider use the same account.
 
 ```bash
-# 1. Generate a new SSH key
-sshwitch gen --name work --email you@company.com
-
-# 2. Add the printed public key to GitHub/GitLab (Settings → SSH Keys)
-
-# 3. Add the key to the SSH agent
-sshwitch add --key work
-
-# 4. Link the key to a repository
-cd ~/code/work-project
-sshwitch link --key work
-
-# 5. Verify everything is working
-sshwitch doctor
+sshwitch switch --key work --host github.com --host gitlab.com
 ```
 
-That's it. All `git push`, `git pull`, and `git fetch` operations in `~/code/work-project` will now use the `work` key automatically.
+The hosts are remembered. Switching keys later is shorter:
 
----
+```bash
+sshwitch switch --key personal
+```
+
+Disable the global default without forgetting the hosts:
+
+```bash
+sshwitch switch --off
+```
+
+### Repository override
+
+Force one repository to use a particular key, regardless of the global default:
+
+```bash
+cd ~/code/work-project
+sshwitch link --key work
+```
+
+Remove the override and return to global SSH behavior:
+
+```bash
+sshwitch unlink
+```
+
+A repository override always takes precedence over the global default. `sshwitch status` explains which key will win.
+
+## First-time workflow
+
+```bash
+# Generate a key pair and load it into ssh-agent.
+sshwitch gen --name work --email you@company.com --add-to-agent
+
+# Add ~/.ssh/work.pub to your GitHub or GitLab account, then choose its hosts.
+sshwitch switch --key work --host github.com --host gitlab.com
+
+# Inspect the effective selection and test the setup.
+sshwitch status
+sshwitch doctor
+```
 
 ## Commands
 
-### `sshwitch gen` — Generate an SSH key
-
-Creates a new ed25519 SSH key pair in `~/.ssh/`.
-
-```
-USAGE: sshwitch gen --name <name> --email <email> [--add-to-agent] [--dry-run]
-
-OPTIONS:
-  --name <name>     Name for the key file (stored as ~/.ssh/<name>)
-  --email <email>   Email address to embed as the key comment
-  --add-to-agent    Add the key to the SSH agent immediately
-  --dry-run         Print what would happen without doing it
-```
-
-**Examples:**
+### Generate and load keys
 
 ```bash
-# Generate a key for your work account
 sshwitch gen --name work --email you@company.com
-
-# Generate a key and add it to the agent in one step
-sshwitch gen --name personal --email you@gmail.com --add-to-agent
-
-# Preview what would happen without making changes
-sshwitch gen --name test --email test@test.com --dry-run
-```
-
-**What it does:**
-1. Runs `ssh-keygen -t ed25519` to generate the key pair
-2. Sets file permissions to `600` (required by SSH)
-3. Optionally adds the key to `ssh-agent` via `ssh-add`
-4. Prints the public key so you can copy it to GitHub/GitLab
-
-The generated files:
-- `~/.ssh/<name>` — private key (keep this secret)
-- `~/.ssh/<name>.pub` — public key (add this to GitHub/GitLab)
-
----
-
-### `sshwitch add` — Add a key to the SSH agent
-
-Loads an existing SSH private key into the running SSH agent so it is available for Git operations and SSH connections.
-
-```
-USAGE: sshwitch add --key <key>
-
-OPTIONS:
-  --key <key>       Key name (e.g., work) or absolute path to private key
-```
-
-**Examples:**
-
-```bash
-# Add by key name
+sshwitch gen --name work --email you@company.com --add-to-agent
 sshwitch add --key work
-
-# Add by path
-sshwitch add --key ~/.ssh/personal
+sshwitch list
 ```
 
-**What it does:**
+`gen` creates an ed25519 private/public key pair under `~/.ssh`. `add` loads an existing private key into the current SSH agent. `list` finds files that have a matching `.pub` file and marks keys active globally or in the current repository.
 
-Runs `ssh-add <key-path>` to load the key into the agent. If the agent is not running, the command exits with an error.
-
----
-
-### `sshwitch link` — Link a key to a repository
-
-Configures a specific Git repository to use a given SSH key for all remote operations.
-
-```
-USAGE: sshwitch link --key <key> [--path <path>] [--dry-run]
-
-OPTIONS:
-  --key <key>       Key name (e.g., work) or absolute path to private key
-  --path <path>     Path to the git repository (defaults to current directory)
-  --dry-run         Print what would happen without doing it
-```
-
-**Examples:**
+### Choose a global default
 
 ```bash
-# Link from inside the repository directory
-cd ~/code/work-project
+sshwitch switch --key work --host github.com
+sshwitch switch --key personal       # reuses remembered hosts
+sshwitch switch --off
+sshwitch status
+```
+
+Hosts must be literal hostnames or IP addresses. Wildcards are intentionally not accepted because `sshwitch` validates and reports the effective configuration for every host.
+
+### Override one repository
+
+```bash
 sshwitch link --key work
-
-# Link by specifying the repo path explicitly
-sshwitch link --key personal --path ~/code/my-blog
-
-# Preview the git config command without running it
-sshwitch link --key work --dry-run
-```
-
-**What it does:**
-
-Runs the following inside the target repository:
-
-```bash
-git config core.sshCommand "ssh -i ~/.ssh/work -o IdentitiesOnly=yes"
-```
-
-This is a **local** repository setting — it only affects that one repo and leaves all other repos and your global SSH config untouched. Remote URLs are never modified.
-
-**Verify the link was set:**
-
-```bash
-git config core.sshCommand
-# → ssh -i /Users/you/.ssh/work -o IdentitiesOnly=yes
-```
-
----
-
-### `sshwitch unlink` — Unlink a key from a repository
-
-Removes the SSH key binding from a Git repository, reverting to Git's default key resolution.
-
-```
-USAGE: sshwitch unlink [--path <path>] [--dry-run]
-
-OPTIONS:
-  --path <path>     Path to the git repository (defaults to current directory)
-  --dry-run         Print what would happen without doing it
-```
-
-**Examples:**
-
-```bash
-# Unlink from inside the repository directory
-cd ~/code/work-project
+sshwitch link --key personal --path ~/code/blog
 sshwitch unlink
+sshwitch unlink --path ~/code/blog
+```
 
-# Unlink by specifying the repo path explicitly
-sshwitch unlink --path ~/code/my-blog
+Neither command changes the repository remote URL.
 
-# Preview what would happen without making changes
+### Preview and troubleshoot
+
+Write commands support `--dry-run`, which reports the intended result without changing files:
+
+```bash
+sshwitch switch --key work --host github.com --dry-run
+sshwitch link --key work --dry-run
 sshwitch unlink --dry-run
+sshwitch gen --name test --email test@example.com --dry-run
 ```
 
-**What it does:**
-
-1. Confirms the target is a valid Git repository
-2. Shows the currently linked SSH key
-3. Runs `git config --unset core.sshCommand` to remove the binding
-
-If no key is linked to the repo, it reports that and exits cleanly.
-
----
-
-### `sshwitch list` — List SSH keys
-
-Shows all SSH key pairs found in `~/.ssh/`.
-
-```
-USAGE: sshwitch list
-```
-
-**Example output:**
-
-```
-NAME                           TYPE         CREATED
-------------------------------------------------------------
-personal                       ed25519      4/1/26
-work                           ed25519      4/3/26
-```
-
-Only files that have both a private key and a matching `.pub` file are shown.
-
----
-
-### `sshwitch doctor` — Run diagnostics
-
-Checks your SSH setup for common configuration problems and connectivity issues.
-
-```
-USAGE: sshwitch doctor
-```
-
-**Example output:**
-
-```
-sshwitch doctor — running checks...
-
-[sshwitch] Checking ~/.ssh directory permissions (must be 700)...
-[PASS] ~/.ssh permissions: 700 ✓
-
-[sshwitch] Checking private key file permissions (must be 600)...
-[PASS]   work permissions: 600 ✓
-[PASS]   personal permissions: 600 ✓
-
-[sshwitch] Checking SSH connectivity to remote Git hosts...
-[PASS] GitHub SSH connectivity: reachable ✓
-[PASS] GitLab SSH connectivity: reachable ✓
-
-✓ All checks passed.
-```
-
-**What it checks:**
-
-| Check | Why it matters |
-|---|---|
-| `~/.ssh` permissions (`700`) | Prevents other users on the system from reading your keys |
-| Private key permissions (`600`) | SSH refuses to use keys that are too permissive |
-| GitHub/GitLab connectivity | Confirms your network can reach the Git host over SSH |
-
-**If a check fails**, the output includes a fix command:
-
-```
-[FAIL] ~/.ssh permissions: Expected 700, got 755. Fix: chmod 700 ~/.ssh
-[FAIL]   work permissions: Expected 600, got 644. Fix: chmod 600 ~/.ssh/work
-```
-
----
-
-## Common Workflows
-
-### Work and personal accounts on the same machine
+Add `--verbose` to any command to show paths, underlying commands, configuration precedence, validation details, or captured diagnostic output:
 
 ```bash
-# Set up work identity
-sshwitch gen --name work --email alice@company.com
-sshwitch add --key work
-# Add ~/.ssh/work.pub to your work GitHub account
-
-# Set up personal identity
-sshwitch gen --name personal --email alice@gmail.com
-sshwitch add --key personal
-# Add ~/.ssh/personal.pub to your personal GitHub account
-
-# Link each repo to the correct key
-sshwitch link --key work --path ~/code/work-project
-sshwitch link --key personal --path ~/code/side-project
-
-# Confirm setup
-sshwitch doctor
+sshwitch status --verbose
+sshwitch doctor --verbose
 ```
 
-### Switching a repository to a different key
+`NO_COLOR=1` disables ANSI colors. Output remains understandable without colors.
 
-Just run `sshwitch link` again — it overwrites the existing `core.sshCommand` setting:
+## How it works
 
-```bash
-cd ~/code/some-repo
-sshwitch link --key personal
+For the global default, `sshwitch` adds this top-level line to `~/.ssh/config` once:
+
+```sshconfig
+Include ~/.ssh/sshwitch.conf
 ```
 
-### Using the `--dry-run` flag
+It then owns and atomically updates `~/.ssh/sshwitch.conf`:
 
-Append `--dry-run` to any write command to see what `sshwitch` would do without making changes:
-
-```bash
-sshwitch gen --name test --email test@test.com --dry-run
-# [dry-run] Would run: ssh-keygen -t ed25519 -C "test@test.com" -f /Users/you/.ssh/test -N ""
-# [dry-run] Would set permissions 600 on /Users/you/.ssh/test and /Users/you/.ssh/test.pub
-
-sshwitch link --key work --dry-run
-# [dry-run] Would run in /Users/you/code/work-project:
-# [dry-run]   git config core.sshCommand "ssh -i /Users/you/.ssh/work -o IdentitiesOnly=yes"
+```sshconfig
+Host github.com gitlab.com
+  IdentityFile "/Users/you/.ssh/work"
+  IdentitiesOnly yes
 ```
 
-### Removing a key link from a repository
+Before integrating with an existing config, `sshwitch` creates a timestamped backup. It validates the complete proposed configuration with `ssh -G` before committing it and uses permissions `0600`. Existing SSH rules remain untouched. Because OpenSSH accumulates multiple `IdentityFile` directives, `status` and `doctor` warn if another matching rule adds fallback identities.
 
-```bash
-cd ~/code/some-repo
-sshwitch unlink
+For a repository override, `sshwitch link` writes a local Git setting in `.git/config`:
+
+```ini
+core.sshCommand = ssh -i /Users/you/.ssh/work -o IdentitiesOnly=yes
 ```
 
-Git will fall back to its default SSH behavior. Use `--dry-run` to preview first.
+Git passes that command directly to SSH, so it takes precedence over the user-level default for that repository. `unlink` removes only this local value.
 
----
+## Diagnostics
 
-## How It Works
+`sshwitch doctor` checks:
 
-`sshwitch link` sets a **local** Git config value for each repository:
+- `~/.ssh` directory permissions (`0700`)
+- private key permissions (`0600`)
+- the managed include and selected global identities
+- `IdentitiesOnly` and additional fallback identities
+- SSH connectivity for the current repository's effective key
 
-```
-core.sshCommand = ssh -i ~/.ssh/<key-name> -o IdentitiesOnly=yes
-```
+Failed checks return a nonzero exit status and include an actionable fix. Connectivity checks may add a previously unseen host to `known_hosts`, matching OpenSSH's `accept-new` behavior.
 
-- `-i ~/.ssh/<key-name>` — tells SSH which private key to use
-- `-o IdentitiesOnly=yes` — prevents SSH from trying other keys loaded in the agent
+## Safety guarantees
 
-This value lives in `.git/config` inside the repository and overrides both `~/.gitconfig` and `~/.ssh/config` for that repo only.
-
----
-
-## Requirements
-
-- macOS 14 or later
-- Git
-- `ssh-keygen` (included with macOS)
-- `ssh-add` (included with macOS, needed for `sshwitch add` and `gen --add-to-agent`)
-
----
-
-## Building from Source
-
-```bash
-git clone https://github.com/dimaswisodewo/sshwitch.git
-cd sshwitch
-
-# Debug build
-swift build
-
-# Release build
-swift build -c release
-
-# Run directly
-swift run sshwitch --help
-```
-
----
+- The system-wide `/etc/ssh/ssh_config` is never modified.
+- Existing user SSH rules are preserved rather than rewritten.
+- An unrelated pre-existing `~/.ssh/sshwitch.conf` is never overwritten.
+- Symlinked `~/.ssh/config` files keep their symlink.
+- Candidate configuration is validated before installation.
+- Private-key contents are never printed.
 
 ## License
 

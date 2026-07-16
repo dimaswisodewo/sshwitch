@@ -4,16 +4,20 @@ import Foundation
 struct List: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
-        abstract: "List SSH keys in ~/.ssh managed by sshwitch.",
+        abstract: "List available SSH keys and show where active keys apply.",
         discussion: """
         Examples:
           sshwitch list
 
-        Shows all SSH key pairs found in ~/.ssh (files with a matching .pub file).
+        Shows key pairs found in ~/.ssh. The ACTIVE column distinguishes the
+        global default from a key overriding the current Git repository.
         """
     )
 
+    @OptionGroup var output: OutputOptions
+
     func run() throws {
+        output.apply()
         let sshDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh")
 
         guard FileManager.default.fileExists(atPath: sshDir.path) else {
@@ -33,13 +37,23 @@ struct List: ParsableCommand {
             return
         }
 
-        let header = String(format: "%-30@ %-12@ %@", "NAME", "TYPE", "CREATED")
+        let globalPath = (try? SSHConfig().readState())?.keyPath
+        let localPath = RepositoryState.localSSHCommand(at: FileManager.default.currentDirectoryPath)
+            .flatMap(RepositoryState.keyPath)
+        let header = String(format: "%-26@ %-11@ %-12@ %@", "NAME", "TYPE", "CREATED", "ACTIVE")
         Output.print(Output.colored(header, .bold))
-        Output.print(String(repeating: "-", count: 60))
+        Output.print(String(repeating: "-", count: 72))
 
         for key in keys {
-            Output.print(String(format: "%-30@ %-12@ %@", key.name, key.keyType, key.created))
+            let keyPath = sshDir.appendingPathComponent(key.name).path
+            var active: [String] = []
+            if globalPath == keyPath { active.append("global") }
+            if localPath == keyPath { active.append("repository") }
+            Output.print(String(format: "%-26@ %-11@ %-12@ %@", key.name, key.keyType, key.created,
+                                active.isEmpty ? "—" : active.joined(separator: ", ")))
         }
+        Output.print("")
+        Output.hint("See precedence and hosts: sshwitch status")
     }
 
     // MARK: - Helpers
